@@ -1,4 +1,6 @@
-#!/bin/bash
+#ce
+
+!/bin/bash
 
 logFile=/tmp/provision.log
 
@@ -19,15 +21,67 @@ echo "GRANT ALL ON cbrain_db.* TO 'cbrain'@'localhost';" >> $sqlscript
 echo "FLUSH PRIVILEGES;" >> $sqlscript
 
 cat $sqlscript | sudo mysql -u root >> $logFile
-
+#exit
 ### Installing Ruby Version Manager
 
 echo "Installing Ruby Version Manager" >> $logFile
 echo "-----------------------------------------------" >> $logFile
 
 cd $HOME
-\curl -sSL https://rvm.io/mpapis.asc | gpg --import - >> $logFile
-\curl -sSL https://get.rvm.io | bash -s stable >> $logFile
+sudo apt-get install gnupg2 debconf-utils -y >> $logFile
+sudo DEBIAN_FRONTEND=noninteractive apt-get install -y libssl-dev libssl1.1
+whichrvm=""
+counter=1
+
+until [ "x$whichrvm" != "x" ]
+do
+  echo "-------------------RVM $counter"
+  gpg2 --keyserver hkp://pool.sks-keyservers.net --recv-keys 409B6B1796C275462A1703113804BB82D39DC0E3 7D2BAF1CF37B13E2069D6956105BD0E739499BDB >> $logFile
+  curl -sSL https://rvm.io/mpapis.asc | gpg2 --import -
+  curl -sSL https://rvm.io/pkuczynski.asc | gpg2 --import -
+  cd /tmp
+  ### add to ensure that it doesn't hang up on install
+  curl -sSL https://get.rvm.io -o rvm.sh
+  sudo apt-get update
+  cat /tmp/rvm.sh | bash -s stable --rails
+  source $HOME/.rvm/scripts/rvm >> $logFile
+  whichrvm=`which rvm`
+  ((counter++))
+  if [ $counter -eq 10 ]
+  then
+    whichrvm="error"
+  fi
+done
+
+if [ $whichrvm == "error" ]
+then
+   echo "There was a problem trying to install rvm"
+   exit 1
+fi
+
+echo "Installing Ruby" >> $logFile
+echo "-----------------------------------------------" >> $logFile
+whichruby=""
+counter=1
+
+until [ "x$whichruby" != "x" ]
+do
+  rvm info >> $logFile
+  rvm install 2.4 >> $logFile
+  rvm --default 2.4 >> $logFile
+  whichruby=`which ruby`
+  ((counter++))
+  if [ $counter -eq 10 ]
+  then
+     whichruby="error"
+  fi
+done
+
+if [ $whichruby == "error" ]
+then
+   echo "There was a problem installing ruby"
+   exit 1
+fi
 
 source $HOME/.rvm/scripts/rvm >> $logFile
 
@@ -42,6 +96,8 @@ rvm --default 2.4 >> $logFile
 
 echo "Cloning CBRAIN" >> $logFile
 echo "-----------------------------------------------" >> $logFile
+
+### Change if you want to pull a branch or get the code from somewhere else
 
 cd $HOME
 git clone https://github.com/aces/cbrain.git >> $logFile
@@ -102,7 +158,7 @@ mkdir $HOME/FlatLocalDP
 mkdir $HOME/SshDP
 mkdir $HOME/CBLocalDP
 
-### install docker 
+### install docker
 
 dockerLog=/tmp/docker-install.log
 sudo apt-get install docker.io -y > $dockerLog
@@ -112,7 +168,7 @@ sudo usermod -a -G docker ubuntu >> $dockerLog
 singLog=/tmp/singularity.log
 
 mkdir $HOME/singTemp; cd $HOME/singTemp
-sudo apt-get install python dh-autoreconf build-essential -y > $singLog 
+sudo apt-get install python dh-autoreconf build-essential -y > $singLog
 wget https://github.com/singularityware/singularity/releases/download/2.4.1/singularity-2.4.1.tar.gz >> $singLog
 tar -xvzf singularity-2.4.1.tar.gz >> $singLog
 cd singularity-2.4.1
@@ -144,12 +200,28 @@ echo $HOME | xargs -I {} echo 'DataProvider.create :id => 4, :name => "CbrainDP"
 echo $USER | xargs -I {} echo 'd=DataProvider.where("id=4").first; d.remote_user = "{}"; d.remote_host = "localhost"; d.remote_port = 22; d.save' | rails c >> $logFile
 echo $timezone | xargs -I {} echo 'd=DataProvider.where("id=4").first; d.time_zone = "{}"; d.save' | rails c >> $logFile
 
+#### Set up bids-validator
+mkdir $HOME/vendor
+cd $HOME/vendor
+
+git clone https://github.com/bids-standard/bids-validator.git >> $logFile
+sudo apt-get install npm -y >> $logFile
+cd bids-validator
+sudo npm install -g bids-validator >> $logFile
+
+#### Install datalad
+
+wget -O- http://neuro.debian.net/lists/bionic.us-ca.full | sudo tee /etc/apt/sources.list.d/neurodebian.sources.list >> $logFile
+sudo apt-key adv --recv-keys --keyserver hkp://pool.sks-keyservers.net:80 0xA5D32F012649A5A >> $logFile
+sudo apt-get update >> $logFile
+sudo apt-get install datalad -y >> $logFile
+
 #### Set up the local Bourreaux
 
 # Make sure you can see bundle at login
 cd $HOME
 echo 'export PATH="$PATH:$HOME/.rvm/bin"' > .tmpbashrc
-echo  '[[ -s "$HOME/.rvm/scripts/rvm" ]] && source "$HOME/.rvm/scripts/rvm"' >> .tmpbashrc 
+echo  '[[ -s "$HOME/.rvm/scripts/rvm" ]] && source "$HOME/.rvm/scripts/rvm"' >> .tmpbashrc
 cat .bashrc >> .tmpbashrc
 cp .bashrc .bashrc.old
 mv .tmpbashrc .bashrc
@@ -159,4 +231,4 @@ cd $HOME/cbrain/BrainPortal
 
 echo $HOME | xargs -I {} echo 'RemoteResource.create :id => 2, :name => "LocalBourreau", :type => "Bourreau", :user_id => 1, :group_id => 1, :online => 1, :description => "Automatically Generated Local Bourreau", :ssh_control_host => "localhost", :ssh_control_port => 22, :ssh_control_rails_dir => "{}/cbrain/Bourreau", :tunnel_mysql_port => 3333, :tunnel_actres_port => 3334, :dp_cache_dir => "{}/BorCache", :workers_instances=> 3, :workers_chk_time => 5, :workers_log_to => "combined", :workers_verbose => 1, :read_only => 0, :portal_locked => 0, :cache_trust_expire => 2592000, :cms_class => "ScirUnix", :cms_shared_dir => "{}/BorWork", :docker_executable_name => "docker", :singularity_executable_name => "singularity"' | rails c >> $logFile
 echo $USER | xargs -I {} echo 'p=RemoteResource.where("id=2").first; p.ssh_control_user = "{}"; p.save' | rails c >> $logFile
-echo $timezone | xargs -I {} echo 'p=RemoteResource.where("id=2").first; p.time_zone = "{}"; p.save' | rails c >> $logFile 
+echo $timezone | xargs -I {} echo 'p=RemoteResource.where("id=2").first; p.time_zone = "{}"; p.save' | rails c >> $logFile

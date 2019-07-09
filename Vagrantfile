@@ -6,11 +6,9 @@
 # backwards compatibility). Please don't change it unless you know what
 # you're doing.
 Vagrant.configure(2) do |config|
-  config.vm.box = "ubuntu/xenial64"
+  config.vm.box = "ubuntu/bionic64"
 
   config.vm.network "forwarded_port", guest: 3000, host: 3000
-  # config.vm.network "public_network"
-  # config.vm.synced_folder "../data", "/vagrant_data"
 
   required_plugins = %w( vagrant-vbguest vagrant-disksize )
   _retry = false
@@ -23,24 +21,26 @@ Vagrant.configure(2) do |config|
 
   if (_retry)
       exec "vagrant " + ARGV.join(' ')
-  end 
-   
+  end
+
+  ### Change to a size that is needed for your work
   config.disksize.size="10GB"
 
+  ### Change to a memory setting appropriate to your work
   config.vm.provider "virtualbox" do |vb|
-     vb.memory = "8129"
+     vb.memory = "4096"
   end
 
   ## Set the timezone that you are in here
   require 'time'
   timezonetmp = (-1*((Time.zone_offset(Time.now.zone)/60)/60))
-  timezone = timezonetmp >- 1 ? "Etc/GMT+" + timezonetmp.to_s : "Etc/GMT" + timezonetmp.to_s 
+  timezone = timezonetmp >- 1 ? "Etc/GMT+" + timezonetmp.to_s : "Etc/GMT" + timezonetmp.to_s
   config.vm.provision :shell, privileged: true, run: "always", inline: <<-SHELL
       apt-get install ntp -y
       sudo timedatectl set-timezone #{timezone}
       sudo service ntp restart
   SHELL
-  
+
   # View the documentation for the provider you are using for more
   # information on available options.
 
