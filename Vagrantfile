@@ -36,9 +36,9 @@ Vagrant.configure(2) do |config|
   timezonetmp = (-1*((Time.zone_offset(Time.now.zone)/60)/60))
   timezone = timezonetmp >- 1 ? "Etc/GMT+" + timezonetmp.to_s : "Etc/GMT" + timezonetmp.to_s
   config.vm.provision :shell, privileged: true, run: "always", inline: <<-SHELL
-      apt-get install ntp -y
+      apt-get install chrony -y
       sudo timedatectl set-timezone #{timezone}
-      sudo service ntp restart
+      sudo service chrony restart
   SHELL
 
   # View the documentation for the provider you are using for more
